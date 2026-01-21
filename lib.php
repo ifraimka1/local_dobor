@@ -26,37 +26,64 @@
  * Добавляет ссылку в настройки.
  */
 function local_dobor_extend_settings_navigation(\settings_navigation $settingsnav, $context) {
-    global $PAGE;
-    if (!$PAGE->url->compare(new \moodle_url('/admin/settings.php?section=local_dobor'), URL_MATCH_BASE)) {
+    global $PAGE, $USER;
+
+    // Проверяем права администратора
+    if (!has_capability('moodle/site:config', $context)) {
         return;
     }
-    $url = new \moodle_url('/local/dobor/action.php');
-    $node = \navigation_node::create('Generate grades', $url);
-    $settingsnav->add_node($node);
+
+    // Проверяем, что находимся в разделе настроек плагина
+    if ($PAGE->url->compare(new \moodle_url('/admin/settings.php'), URL_MATCH_BASE)
+        && $PAGE->url->get_param('section') == 'local_dobor') {
+        $url = new \moodle_url('/local/dobor/action.php');
+        $node = $settingsnav->add(
+            'Генерация оценок',
+            $url,
+            \navigation_node::TYPE_SETTING,
+            null,
+            'local_dobor_generate',
+            new \pix_icon('i/settings', '')
+        );
+    }
 }
 
 /**
  * Генерирует "Добор 1" в курсах категории /44/.
- * @param array $options (опционально: ['path' => '/44/'])
- * @return array ['added' => int, 'skipped' => int]
  */
 function local_dobor_generate_grades($options = []) {
-    global $CFG;
-    require_once($CFG->libdir.'/gradelib.php');
+    global $DB;
 
-    $pathlike = $options['path'] ?? '/44/';
-    $added = 0;
-    $skipped = 0;
+    $pathlike = $options['path'] ?? '/2/';
+    $dobor1['added'] = 0;
+    $dobor1['skipped'] = 0;
+    $dobor2['added'] = 0;
+    $dobor2['skipped'] = 0;
+    $fix['added'] = 0;
+    $fix['skipped'] = 0;
 
-    $categories = \core_course_category::get_all(['like' => $pathlike]);
-    foreach ($categories as $cat) {
-        foreach ($cat->get_courses() as $course) {
-            $gi = \grade_item::fetch(['courseid' => $course->id, 'itemname' => 'Добор 1']);
-            if ($gi) {
+    // Получаем категории с нужным path
+    $sql = "SELECT cc.* 
+            FROM {course_categories} cc 
+            WHERE cc.path LIKE ?";
+    $categories = $DB->get_records_sql($sql, [$pathlike . '%']);
+
+    foreach ($categories as $category) {
+        $courses = get_courses($category->id);
+
+        foreach ($courses as $course) {
+            // Проверяем существование grade item
+            $exists = $DB->record_exists('grade_items', [
+                'courseid' => $course->id,
+                'itemname' => 'Добор 1'
+            ]);
+
+            if ($exists) {
                 $skipped++;
                 continue;
             }
 
+            // Создаем grade item
             $gradeitem = new \grade_item([
                 'courseid' => $course->id,
                 'itemname' => 'Добор 1',
@@ -64,9 +91,15 @@ function local_dobor_generate_grades($options = []) {
                 'gradetype' => GRADE_TYPE_VALUE,
                 'grademax' => 100,
                 'grademin' => 0,
-                'calculation' => '=0',  // Ваша формула
-                'idnumber' => 'dobor1'
-            ]);
+                'gradepass' => 0,
+                'decimals' => 2,
+                'iteminfo' => 'Автоматически созданный элемент оценки',
+                'idnumber' => 'dobor1',
+                'weightoverride' => 0,
+                'aggregationcoef' => 0,
+                'sortorder' => 999
+            ], false);
+
             if ($gradeitem->insert()) {
                 $added++;
             }

@@ -22,48 +22,59 @@
  * @license     https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(__DIR__.'/../config.php');
+require(__DIR__.'/../../config.php');
 require_once(__DIR__.'/lib.php');
 
-require_login();
-require_sesskey();
-
-if (!local_dobor_can_access()) {  // Вызов из lib.php
-    throw new \moodle_exception('nopermissions', 'error');
-}
+require_admin();
 
 $PAGE->set_url('/local/dobor/action.php');
 $PAGE->set_context(\context_system::instance());
 $PAGE->set_title('Dobor: Generate grades');
 $PAGE->set_heading('Генерация оценок');
+$PAGE->set_pagelayout('admin');
 
-$success = false;
 $result = null;
+$message = '';
 
+// Обработка POST-запроса
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
-    $result = local_dobor_generate_grades();  // Вызов функции из lib.php
-    $success = true;
-    \core\notification::add("Добавлено: {$result['added']}, пропущено: {$result['skipped']}", \core\notification::NOTIFY_SUCCESS);
+    $result = local_dobor_generate_grades();
+    $message = "Добавлено: {$result['added']}, пропущено: {$result['skipped']}";
+
+    // Перенаправляем с сообщением
+    redirect(
+        new \moodle_url('/local/dobor/action.php'),
+        $message,
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
 }
 
 echo $OUTPUT->header();
 
-if ($success) {
-    echo \html_writer::div("Результат: " . json_encode($result), 'alert alert-success');
-}
-
+// Выводим форму
 echo \html_writer::start_div('card mt-3');
 echo \html_writer::start_div('card-body');
 echo \html_writer::tag('h4', 'Генерировать "Добор 1"');
 echo \html_writer::tag('p', 'Добавит в курсы с path /44/, где нет "Добор 1".');
 
-echo \html_writer::start_tag('form', ['method' => 'post']);
-echo \html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
-echo \html_writer::empty_tag('button', [
-    'type' => 'submit',
-    'class' => 'btn btn-primary btn-lg',
-    'name' => 'generate'
-], '🚀 Запустить генерацию');
+echo \html_writer::start_tag('form', [
+    'method' => 'post',
+    'onsubmit' => 'return confirm(\'Вы уверены, что хотите запустить генерацию?\');'
+]);
+echo \html_writer::empty_tag('input', [
+    'type' => 'hidden',
+    'name' => 'sesskey',
+    'value' => sesskey()
+]);
+echo \html_writer::tag('div',
+    \html_writer::empty_tag('button', [
+        'type' => 'submit',
+        'class' => 'btn btn-primary btn-lg',
+        'name' => 'generate'
+    ], '🚀 Запустить генерацию'),
+    ['class' => 'mt-3']
+);
 echo \html_writer::end_tag('form');
 
 echo \html_writer::end_div(); // card-body
