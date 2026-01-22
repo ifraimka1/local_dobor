@@ -23,61 +23,52 @@
  */
 
 require(__DIR__.'/../../config.php');
-require_once(__DIR__.'/lib.php');
+require_once($CFG->dirroot . '/local/dobor/lib.php');
 
-require_admin();
+require_login();
 
 $PAGE->set_url('/local/dobor/action.php');
 $PAGE->set_context(\context_system::instance());
 $PAGE->set_title('Dobor: Generate grades');
 $PAGE->set_heading('Генерация оценок');
-$PAGE->set_pagelayout('admin');
 
-$result = null;
-$message = '';
+$success = false;
 
-// Обработка POST-запроса
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
-    $result = local_dobor_generate_grades();
-    $message = $result;
+    // Создаём экземпляр задачи
+    $task = \local_dobor\task\generate_grades::instance($USER->id,'/2/');
 
-    // Перенаправляем с сообщением
-    redirect(
-        new \moodle_url('/local/dobor/action.php'),
-        $message,
-        null,
+    // Ставим в очередь (второй аргумент true — игнорировать дубликаты с теми же custom_data и user)
+    \core\task\manager::queue_adhoc_task($task, true);
+
+    \core\notification::add(
+        'Задача на генерацию оценок поставлена в очередь. Она будет выполнена при следующем запуске cron.',
         \core\output\notification::NOTIFY_SUCCESS
     );
+    $success = true;
 }
 
 echo $OUTPUT->header();
 
-// Выводим форму
+if ($success) {
+    echo \html_writer::div('Запуск генерации инициирован.', 'alert alert-info');
+}
+
 echo \html_writer::start_div('card mt-3');
 echo \html_writer::start_div('card-body');
-echo \html_writer::tag('h4', 'Генерировать "Добор 1"');
-echo \html_writer::tag('p', 'Добавит в курсы с path /44/, где нет "Добор 1".');
+echo \html_writer::tag('h4', 'Генерировать "Добор 1/2" и "Баллы за семестр"');
+echo \html_writer::tag('p', 'Будут созданы оценки во всех курсах подходящих категорий. Операция выполняется в фоне через ad-hoc задачу.');
 
-echo \html_writer::start_tag('form', [
-    'method' => 'post',
-    'onsubmit' => 'return confirm(\'Вы уверены, что хотите запустить генерацию?\');'
+echo \html_writer::start_tag('form', ['method' => 'post']);
+echo \html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
+echo \html_writer::tag('button', '🚀 Запустить генерацию', [
+    'type' => 'submit',
+    'class' => 'btn btn-primary btn-lg',
+    'name' => 'generate'
 ]);
-echo \html_writer::empty_tag('input', [
-    'type' => 'hidden',
-    'name' => 'sesskey',
-    'value' => sesskey()
-]);
-echo \html_writer::tag('div',
-    \html_writer::empty_tag('button', [
-        'type' => 'submit',
-        'class' => 'btn btn-primary btn-lg',
-        'name' => 'generate'
-    ], 'Запустить генерацию'),
-    ['class' => 'mt-3']
-);
 echo \html_writer::end_tag('form');
 
-echo \html_writer::end_div(); // card-body
-echo \html_writer::end_div(); // card
+echo \html_writer::end_div();
+echo \html_writer::end_div();
 
 echo $OUTPUT->footer();

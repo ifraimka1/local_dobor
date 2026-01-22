@@ -26,3 +26,5 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Dobor setup plugin';
+
+$string['task_generate_grades'] = 'Generate grades task';

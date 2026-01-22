@@ -49,7 +49,7 @@ function local_dobor_extend_settings_navigation(\settings_navigation $settingsna
 }
 
 /**
- * Генерирует "Добор 1" в курсах категории /44/.
+ * Генерирует "Добор 1" в курсах категории.
  */
 function local_dobor_generate_grades($options = []) {
     global $DB, $CFG;
