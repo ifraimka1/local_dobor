@@ -52,27 +52,29 @@ function local_dobor_extend_settings_navigation(\settings_navigation $settingsna
  * Генерирует "Добор 1" в курсах категории /44/.
  */
 function local_dobor_generate_grades($options = []) {
-    global $DB;
+    global $DB, $CFG;
+
+    require_once($CFG->libdir . '/gradelib.php');
 
     $pathlike = $options['path'] ?? '/2/';
     $itemstogenerate = [
-        [
+        'dobor1' => [
             'name' => 'Добор 1',
-            'id' => 'dobor1',
             'added' => 0,
             'skipped' => 0,
+            'updated' => 0,
         ],
-        [
+        'dobor2' => [
             'name' => 'Добор 2',
-            'id' => 'dobor2',
             'added' => 0,
             'skipped' => 0,
+            'updated' => 0,
         ],
-        [
+        'fix' => [
             'name' => 'Баллы за семестр',
-            'id' => 'fix',
             'added' => 0,
             'skipped' => 0,
+            'updated' => 0,
         ],
     ];
 
@@ -86,40 +88,56 @@ function local_dobor_generate_grades($options = []) {
         $courses = get_courses($category->id);
 
         foreach ($courses as $course) {
-            foreach ($itemstogenerate as $itemtogen) {
+            foreach (['dobor1', 'dobor2', 'fix'] as $itemid) {
                 // Проверяем существование grade item
-                $exists = $DB->record_exists('grade_items', [
+                $record = $DB->get_record('grade_items', [
                     'courseid' => $course->id,
-                    'itemname' => $itemtogen['name'],
+                    'itemname' => $itemstogenerate[$itemid]['name'],
                 ]);
 
-                if ($exists) {
-                    $itemtogen['skipped']++;
+                if ($record) {
+                    if ($record->idnumber === $itemid) {
+                        $itemstogenerate[$itemid]['skipped']++;
+                    } else {
+                        $record->idnumber = $itemid;
+                        $DB->update_record('grade_items', $record);
+                        $itemstogenerate[$itemid]['updated']++;
+                    }
                     continue;
                 }
 
                 // Создаем grade item
                 $gradeitem = new \grade_item();
                 $gradeitem->courseid = $course->id;
-                $gradeitem->itemname = $itemtogen['name'];
+                $gradeitem->itemname = $itemstogenerate[$itemid]['name'];
                 $gradeitem->itemtype = 'manual';
-                $gradeitem->idnumber = $itemtogen['id'];
-                $gradeitem->gradetype = GRADE_TYPE_VALUE;
+                $gradeitem->idnumber = $itemid;
                 $gradeitem->grademax = 100;
                 $gradeitem->grademin = 0;
                 $gradeitem->gradepass = 0;
                 $gradeitem->iteminfo = 'Автоматически созданный элемент оценки';
-                $gradeitem->weighttooverride = 0;
                 $gradeitem->aggregationcoef = 0;
+                $gradeitem->locked = 0;
                 $gradeitem->sortorder = 999;
 
                 if ($gradeitem->insert()) {
-                    $added++;
+                    $itemstogenerate[$itemid]['added']++;
                 }
             }
         }
     }
 
-    return ['added' => $added, 'skipped' => $skipped];
+    return "Добавлено:\n
+            - добор 1 - {$itemstogenerate['dobor1']['added']}\n
+            - добор 2 - {$itemstogenerate['dobor2']['added']}\n
+            - баллы за семестр - {$itemstogenerate['fix']['added']}\n
+            Обновлено:\n
+            - добор 1 - {$itemstogenerate['dobor1']['updated']}\n
+            - добор 2 - {$itemstogenerate['dobor2']['updated']}\n
+            - баллы за семестр - {$itemstogenerate['fix']['updated']}
+            Пропущено:\n
+            - добор 1 - {$itemstogenerate['dobor1']['skipped']}\n
+            - добор 2 - {$itemstogenerate['dobor2']['skipped']}\n
+            - баллы за семестр - {$itemstogenerate['fix']['skipped']}";
 }
 

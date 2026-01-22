@@ -39,7 +39,7 @@ $message = '';
 // Обработка POST-запроса
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     $result = local_dobor_generate_grades();
-    $message = "Добавлено: {$result['added']}, пропущено: {$result['skipped']}";
+    $message = $result;
 
     // Перенаправляем с сообщением
     redirect(
@@ -72,7 +72,7 @@ echo \html_writer::tag('div',
         'type' => 'submit',
         'class' => 'btn btn-primary btn-lg',
         'name' => 'generate'
-    ], '🚀 Запустить генерацию'),
+    ], 'Запустить генерацию'),
     ['class' => 'mt-3']
 );
 echo \html_writer::end_tag('form');
