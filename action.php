@@ -32,11 +32,12 @@ $PAGE->set_context(\context_system::instance());
 $PAGE->set_title('Dobor: Generate grades');
 $PAGE->set_heading('Генерация оценок');
 
+$categorypath = optional_param('categorypath', '', PARAM_TEXT);
 $success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     // Создаём экземпляр задачи
-    $task = \local_dobor\task\generate_grades::instance($USER->id,'/2/');
+    $task = \local_dobor\task\generate_grades::instance($USER->id,$categorypath);
 
     // Ставим в очередь (второй аргумент true — игнорировать дубликаты с теми же custom_data и user)
     \core\task\manager::queue_adhoc_task($task, true);
@@ -61,6 +62,15 @@ echo \html_writer::tag('p', 'Будут созданы оценки во все�
 
 echo \html_writer::start_tag('form', ['method' => 'post']);
 echo \html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
+echo \html_writer::empty_tag('input', [
+    'type' => 'text',
+    'name' => 'categorypath',
+    'id' => 'categorypath',
+    'class' => 'form-control mb-3',
+    'value' => $categorypath,
+    'placeholder' => 'введите id категории',
+    'required' => true
+]);
 echo \html_writer::tag('button', '🚀 Запустить генерацию', [
     'type' => 'submit',
     'class' => 'btn btn-primary btn-lg',
