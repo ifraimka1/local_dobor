@@ -55,12 +55,26 @@ function local_dobor_generate_grades($options = []) {
     global $DB;
 
     $pathlike = $options['path'] ?? '/2/';
-    $dobor1['added'] = 0;
-    $dobor1['skipped'] = 0;
-    $dobor2['added'] = 0;
-    $dobor2['skipped'] = 0;
-    $fix['added'] = 0;
-    $fix['skipped'] = 0;
+    $itemstogenerate = [
+        [
+            'name' => 'Добор 1',
+            'id' => 'dobor1',
+            'added' => 0,
+            'skipped' => 0,
+        ],
+        [
+            'name' => 'Добор 2',
+            'id' => 'dobor2',
+            'added' => 0,
+            'skipped' => 0,
+        ],
+        [
+            'name' => 'Баллы за семестр',
+            'id' => 'fix',
+            'added' => 0,
+            'skipped' => 0,
+        ],
+    ];
 
     // Получаем категории с нужным path
     $sql = "SELECT cc.* 
@@ -72,36 +86,36 @@ function local_dobor_generate_grades($options = []) {
         $courses = get_courses($category->id);
 
         foreach ($courses as $course) {
-            // Проверяем существование grade item
-            $exists = $DB->record_exists('grade_items', [
-                'courseid' => $course->id,
-                'itemname' => 'Добор 1'
-            ]);
+            foreach ($itemstogenerate as $itemtogen) {
+                // Проверяем существование grade item
+                $exists = $DB->record_exists('grade_items', [
+                    'courseid' => $course->id,
+                    'itemname' => $itemtogen['name'],
+                ]);
 
-            if ($exists) {
-                $skipped++;
-                continue;
-            }
+                if ($exists) {
+                    $itemtogen['skipped']++;
+                    continue;
+                }
 
-            // Создаем grade item
-            $gradeitem = new \grade_item([
-                'courseid' => $course->id,
-                'itemname' => 'Добор 1',
-                'itemtype' => 'manual',
-                'gradetype' => GRADE_TYPE_VALUE,
-                'grademax' => 100,
-                'grademin' => 0,
-                'gradepass' => 0,
-                'decimals' => 2,
-                'iteminfo' => 'Автоматически созданный элемент оценки',
-                'idnumber' => 'dobor1',
-                'weightoverride' => 0,
-                'aggregationcoef' => 0,
-                'sortorder' => 999
-            ], false);
+                // Создаем grade item
+                $gradeitem = new \grade_item();
+                $gradeitem->courseid = $course->id;
+                $gradeitem->itemname = $itemtogen['name'];
+                $gradeitem->itemtype = 'manual';
+                $gradeitem->idnumber = $itemtogen['id'];
+                $gradeitem->gradetype = GRADE_TYPE_VALUE;
+                $gradeitem->grademax = 100;
+                $gradeitem->grademin = 0;
+                $gradeitem->gradepass = 0;
+                $gradeitem->iteminfo = 'Автоматически созданный элемент оценки';
+                $gradeitem->weighttooverride = 0;
+                $gradeitem->aggregationcoef = 0;
+                $gradeitem->sortorder = 999;
 
-            if ($gradeitem->insert()) {
-                $added++;
+                if ($gradeitem->insert()) {
+                    $added++;
+                }
             }
         }
     }
