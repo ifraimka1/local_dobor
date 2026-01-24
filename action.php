@@ -37,7 +37,7 @@ $success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     // Создаём экземпляр задачи
-    $task = \local_dobor\task\generate_grades::instance($USER->id,$categorypath);
+    $task = \local_dobor\task\generate_grades::instance($USER->id, $categorypath);
 
     // Ставим в очередь (второй аргумент true — игнорировать дубликаты с теми же custom_data и user)
     \core\task\manager::queue_adhoc_task($task, true);

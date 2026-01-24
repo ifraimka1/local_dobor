@@ -26,7 +26,7 @@
  * Добавляет ссылку в настройки.
  */
 function local_dobor_extend_settings_navigation(\settings_navigation $settingsnav, $context) {
-    global $PAGE, $USER;
+    global $PAGE;
 
     // Проверяем права администратора
     if (!has_capability('moodle/site:config', $context)) {

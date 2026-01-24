@@ -51,8 +51,7 @@ class generate_grades extends \core\task\adhoc_task
         $data = $this->get_custom_data();
         $path = $data->path;
 
-
-        $pathlike = '/'.$path.'/';
+        $pathlike = "%/".$path."/%";
         $itemstogenerate = [
             'dobor1' => [
                 'name' => 'Добор 1',
@@ -81,7 +80,9 @@ class generate_grades extends \core\task\adhoc_task
         $sql = "SELECT cc.* 
             FROM {course_categories} cc 
             WHERE cc.path LIKE ?";
-        $categories = $DB->get_records_sql($sql, ['%' . $pathlike . '%']);
+        $categories = $DB->get_records_sql($sql, [$pathlike]);
+        mtrace('Кинул запрос с pathlike '.$pathlike);
+        mtrace('Статус запроса: '.count($categories));
 
         foreach ($categories as $category) {
             mtrace('Категория с id '.$category->id);
@@ -97,12 +98,22 @@ class generate_grades extends \core\task\adhoc_task
                     ]);
 
                     if ($record) {
-                        if ($record->idnumber === $itemid && $record->hidden === $itemstogenerate[$itemid]['hidden']) {
+                        if ($record->idnumber === $itemid
+                            && $record->hidden == $itemstogenerate[$itemid]['hidden']
+                            && $record->multfactor == 0
+                            && $record->weightoverride == 1
+                            && $record->aggregationcoef == 0
+                            && $record->aggregationcoef2 == 0) {
                             $itemstogenerate[$itemid]['skipped']++;
                             mtrace('Пропустил элемент с id '.$record->id);
                         } else {
+                            mtrace('hidden = '.$record->hidden.' multfactor = '.$record->multfactor.' weighttooverride = '.$record->weightoverride);
                             $record->idnumber = $itemid;
                             $record->hidden = $itemstogenerate[$itemid]['hidden'];
+                            $record->multfactor = 0;
+                            $record->weightoverride = 1;
+                            $record->aggregationcoef = 0;
+                            $record->aggregationcoef2 = 0;
                             $DB->update_record('grade_items', $record);
                             $itemstogenerate[$itemid]['updated']++;
                             mtrace('Обновил элемент с id '.$record->id);
@@ -120,10 +131,12 @@ class generate_grades extends \core\task\adhoc_task
                     $gradeitem->grademin = 0;
                     $gradeitem->gradepass = 0;
                     $gradeitem->iteminfo = 'Автоматически созданный элемент оценки';
+                    $gradeitem->multfactor = 0;
+                    $gradeitem->weightoverride = 1;
                     $gradeitem->aggregationcoef = 0;
+                    $gradeitem->aggregationcoef2 = 0;
                     $gradeitem->locked = 0;
                     $gradeitem->hidden = $itemstogenerate[$itemid]['hidden'];
-                    $gradeitem->sortorder = 999;
                     $insertresult = $gradeitem->insert();
 
                     if ($insertresult) {
