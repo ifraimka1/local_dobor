@@ -50,16 +50,24 @@ class generate_grades extends \core\task\adhoc_task
 
         $data = $this->get_custom_data();
         $path = $data->path;
-        $semestridnumber = 'semestr';
-
         $pathlike = "%/".$path."/%";
+        $semestridnumber = 'semestr';
         $itemstogenerate = [
+            'fix' => [
+                'name' => 'Баллы за семестр',
+                'added' => 0,
+                'skipped' => 0,
+                'updated' => 0,
+                'hidden' => 1,
+                'calculation' => "=[[$semestridnumber]]",
+            ],
             'dobor1' => [
                 'name' => 'Добор 1',
                 'added' => 0,
                 'skipped' => 0,
                 'updated' => 0,
                 'hidden' => 0,
+                'calculation' => '=0',
             ],
             'dobor2' => [
                 'name' => 'Добор 2',
@@ -67,13 +75,7 @@ class generate_grades extends \core\task\adhoc_task
                 'skipped' => 0,
                 'updated' => 0,
                 'hidden' => 0,
-            ],
-            'fix' => [
-                'name' => 'Баллы за семестр',
-                'added' => 0,
-                'skipped' => 0,
-                'updated' => 0,
-                'hidden' => 1,
+                'calculation' => '=0',
             ],
         ];
 
@@ -83,7 +85,6 @@ class generate_grades extends \core\task\adhoc_task
             WHERE cc.path LIKE ?";
         $categories = $DB->get_recordset_sql($sql, [$pathlike]);
         mtrace('Кинул запрос с pathlike '.$pathlike);
-        mtrace('Статус запроса: '.count($categories));
 
         // Проходимся по каждой категории
         foreach ($categories as $category) {
@@ -96,30 +97,78 @@ class generate_grades extends \core\task\adhoc_task
                 mtrace('Курс с id'.$course->id);
 
                 // Проверяем есть ли категория для подсчетов
-                $semcategory = $DB->get_record(
-                    'grade_item',
+                $semcategory = $DB->record_exists(
+                    'grade_items',
                     ['courseid' => $course->id, 'idnumber' => $semestridnumber]
                 );
 
                 // Если такой еще нет, создаём
                 if (!$semcategory) {
-                    $semcategory = new \grade_category();
-                    $semcategory->idnumber = $semestridnumber;
+                    $newsemcat = new \grade_category();
+                    $newsemcat->courseid = $course->id;
+                    $newsemcat->fullname = 'Семестр';
+                    $newsemcatid = $newsemcat->insert();
+
+                    $catitem = \grade_item::fetch([
+                        'courseid'     => $course->id,
+                        'itemtype'     => 'category',
+                        'iteminstance' => $newsemcatid,
+                    ]);
+                    $catitem->idnumber = $semestridnumber;
+                    $catitem->update();
+                    mtrace("Создал категорию для семестра (id=$newsemcatid) в курсе с id $course->id");
                 }
 
-                // Готовим оценки под фикс
-                $sql = "SELECT i.id, i.idnumber
+                $sql = "SELECT cat.id
+                    FROM {grade_categories} cat
+                    JOIN {grade_items} i ON i.iteminstance = cat.id
+                    WHERE 1=1
+                        AND i.itemtype = 'category'
+                        AND i.courseid = :courseid
+                        AND i.idnumber LIKE :semestridnumber";
+                $params = ['courseid' => $course->id, 'semestridnumber' => $semestridnumber];
+                $semcatid = $DB->get_field_sql($sql, $params);
+
+                // Суём весь верхний уровень в категорию
+                $sql = "SELECT i.id, i.itemtype, i.iteminstance
                     FROM {grade_items} i
                     JOIN {course} c ON c.id = i.courseid
+                    LEFT JOIN mdl_grade_categories cat ON cat.id = i.categoryid
                     WHERE 1=1
                       AND i.itemtype NOT LIKE 'course'
-                      AND (
-                            i.itemname NOT LIKE '%бонус%'
-                            i.itemname NOT LIKE '%Бонус%'
-                            i.itemname NOT LIKE '%экзамен%'
+                      AND c.id = :courseid
+                      AND cat.parent IS NULL
+                      AND ((
+                            i.idnumber NOT LIKE 'fix' AND
+                            i.idnumber NOT LIKE 'dobor1' AND
+                            i.idnumber NOT LIKE 'dobor2' AND
+                            i.idnumber NOT LIKE :semestridnumber
+                          ) OR i.idnumber IS NULL)
+                      AND ((
+                            i.itemname NOT LIKE '%бонус%' AND
+                            i.itemname NOT LIKE '%Бонус%' AND
+                            i.itemname NOT LIKE '%экзамен%' AND
                             i.itemname NOT LIKE '%Экзамен%'
-                        )";
+                            ) OR i.itemname IS NULL)";
+                $params = ['courseid' => $course->id, 'semestridnumber' => $semestridnumber];
+                $toplevelitems = $DB->get_recordset_sql($sql, $params);
 
+                mtrace("semcatid = $semcatid");
+                foreach ($toplevelitems as $item) {
+                    $item->categoryid = $semcatid;
+                    $DB->update_record('grade_items', $item);
+
+                    if ($item->itemtype == 'category') {
+                        $newcategory = \grade_category::fetch(['id' => $item->iteminstance]);
+                        if ($newcategory) {
+                            $newcategory->parent = $semcatid;
+                            $newcategory->update();
+                            mtrace('Перетащил категорию');
+                        }
+                    }
+                    mtrace("Добавил в категорию семестра ($semcatid) элемент с id $item->id");
+                }
+                $toplevelitems->close();
 
                 // Генерим доборы и фикс
                 foreach (['dobor1', 'dobor2', 'fix'] as $itemid) {
@@ -136,18 +185,19 @@ class generate_grades extends \core\task\adhoc_task
                             && $record->multfactor == 0
                             && $record->weightoverride == 1
                             && $record->aggregationcoef == 0
-                            && $record->aggregationcoef2 == 0) {
+                            && $record->aggregationcoef2 == 0
+                            && $record->calculation === $itemstogenerate[$itemid]['calculation']) {
                             $itemstogenerate[$itemid]['skipped']++;
                             mtrace('Пропустил элемент с id '.$record->id);
                         } else {
                             // Подправляем, если какие-то настройки неверны
-                            mtrace('hidden = '.$record->hidden.' multfactor = '.$record->multfactor.' weighttooverride = '.$record->weightoverride);
                             $record->idnumber = $itemid;
                             $record->hidden = $itemstogenerate[$itemid]['hidden'];
                             $record->multfactor = 0;
                             $record->weightoverride = 1;
                             $record->aggregationcoef = 0;
                             $record->aggregationcoef2 = 0;
+                            $record->calculation = $itemstogenerate[$itemid]['calculation'];
                             $DB->update_record('grade_items', $record);
                             $itemstogenerate[$itemid]['updated']++;
                             mtrace('Обновил элемент с id '.$record->id);
@@ -171,6 +221,7 @@ class generate_grades extends \core\task\adhoc_task
                     $gradeitem->aggregationcoef2 = 0;
                     $gradeitem->locked = 0;
                     $gradeitem->hidden = $itemstogenerate[$itemid]['hidden'];
+                    $gradeitem->calculation = $itemstogenerate[$itemid]['calculation'];
                     $insertresult = $gradeitem->insert();
 
                     if ($insertresult) {
@@ -180,6 +231,7 @@ class generate_grades extends \core\task\adhoc_task
                 }
             }
         }
+        $categories->close();
 
         $result = "Добавлено:\n
             - добор 1 - {$itemstogenerate['dobor1']['added']}\n
