@@ -163,7 +163,9 @@ class generate_grades extends \core\task\adhoc_task
                         if ($newcategory) {
                             $newcategory->parent = $semcatid;
                             $newcategory->update();
-                            mtrace('Перетащил категорию');
+                        } else {
+                            mtrace('Не получил категорию, iteminstance '.$item->iteminstance);
+                            continue;
                         }
                     }
                     mtrace("Добавил в категорию семестра ($semcatid) элемент с id $item->id");
