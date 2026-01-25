@@ -50,6 +50,7 @@ class generate_grades extends \core\task\adhoc_task
 
         $data = $this->get_custom_data();
         $path = $data->path;
+        $semestridnumber = 'semestr';
 
         $pathlike = "%/".$path."/%";
         $itemstogenerate = [
@@ -80,24 +81,56 @@ class generate_grades extends \core\task\adhoc_task
         $sql = "SELECT cc.* 
             FROM {course_categories} cc 
             WHERE cc.path LIKE ?";
-        $categories = $DB->get_records_sql($sql, [$pathlike]);
+        $categories = $DB->get_recordset_sql($sql, [$pathlike]);
         mtrace('Кинул запрос с pathlike '.$pathlike);
         mtrace('Статус запроса: '.count($categories));
 
+        // Проходимся по каждой категории
         foreach ($categories as $category) {
             mtrace('Категория с id '.$category->id);
+            // Получаем курсы в категории
             $courses = get_courses($category->id);
 
+            // Проходимся по каждому курсу
             foreach ($courses as $course) {
                 mtrace('Курс с id'.$course->id);
+
+                // Проверяем есть ли категория для подсчетов
+                $semcategory = $DB->get_record(
+                    'grade_item',
+                    ['courseid' => $course->id, 'idnumber' => $semestridnumber]
+                );
+
+                // Если такой еще нет, создаём
+                if (!$semcategory) {
+                    $semcategory = new \grade_category();
+                    $semcategory->idnumber = $semestridnumber;
+                }
+
+                // Готовим оценки под фикс
+                $sql = "SELECT i.id, i.idnumber
+                    FROM {grade_items} i
+                    JOIN {course} c ON c.id = i.courseid
+                    WHERE 1=1
+                      AND i.itemtype NOT LIKE 'course'
+                      AND (
+                            i.itemname NOT LIKE '%бонус%'
+                            i.itemname NOT LIKE '%Бонус%'
+                            i.itemname NOT LIKE '%экзамен%'
+                            i.itemname NOT LIKE '%Экзамен%'
+                        )";
+
+
+                // Генерим доборы и фикс
                 foreach (['dobor1', 'dobor2', 'fix'] as $itemid) {
-                    // Проверяем существование grade item
+                    // Проверяем существование
                     $record = $DB->get_record('grade_items', [
                         'courseid' => $course->id,
                         'itemname' => $itemstogenerate[$itemid]['name'],
                     ]);
 
                     if ($record) {
+                        // Если все ок, пропускаем
                         if ($record->idnumber === $itemid
                             && $record->hidden == $itemstogenerate[$itemid]['hidden']
                             && $record->multfactor == 0
@@ -107,6 +140,7 @@ class generate_grades extends \core\task\adhoc_task
                             $itemstogenerate[$itemid]['skipped']++;
                             mtrace('Пропустил элемент с id '.$record->id);
                         } else {
+                            // Подправляем, если какие-то настройки неверны
                             mtrace('hidden = '.$record->hidden.' multfactor = '.$record->multfactor.' weighttooverride = '.$record->weightoverride);
                             $record->idnumber = $itemid;
                             $record->hidden = $itemstogenerate[$itemid]['hidden'];

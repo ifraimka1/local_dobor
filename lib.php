@@ -28,12 +28,10 @@
 function local_dobor_extend_settings_navigation(\settings_navigation $settingsnav, $context) {
     global $PAGE;
 
-    // Проверяем права администратора
     if (!has_capability('moodle/site:config', $context)) {
         return;
     }
 
-    // Проверяем, что находимся в разделе настроек плагина
     if ($PAGE->url->compare(new \moodle_url('/admin/settings.php'), URL_MATCH_BASE)
         && $PAGE->url->get_param('section') == 'local_dobor') {
         $url = new \moodle_url('/local/dobor/action.php');
