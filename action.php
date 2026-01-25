@@ -71,7 +71,7 @@ echo \html_writer::empty_tag('input', [
     'placeholder' => 'введите id категории',
     'required' => true
 ]);
-echo \html_writer::tag('button', '🚀 Запустить генерацию', [
+echo \html_writer::tag('button', 'Запустить генерацию', [
     'type' => 'submit',
     'class' => 'btn btn-primary btn-lg',
     'name' => 'generate'
