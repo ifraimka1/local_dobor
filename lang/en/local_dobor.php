@@ -28,3 +28,5 @@ defined('MOODLE_INTERNAL') || die();
 $string['pluginname'] = 'Dobor setup plugin';
 
 $string['task_generate_grades'] = 'Generate grades task';
+$string['task_set_dobor_calculation'] = 'Set dobor calculation';
+$string['task_generate_ekz_dobor'] = 'Create exam retakes';

@@ -38,7 +38,6 @@ class generate_grades extends \core\task\adhoc_task
     {
         $task = new self();
         $task->set_custom_data((object)['path' => $path]);
-        // Можно указать пользователя, от имени которого выполняется задача.
         $task->set_userid($userid);
         return $task;
     }
@@ -129,6 +128,11 @@ class generate_grades extends \core\task\adhoc_task
                 $params = ['courseid' => $course->id, 'semestridnumber' => $semestridnumber];
                 $semcatid = $DB->get_field_sql($sql, $params);
 
+                if (!$semcatid) {
+                    mtrace('Не нашли semcatid');
+                    continue;
+                }
+
                 // Суём весь верхний уровень в категорию
                 $sql = "SELECT i.id, i.itemtype, i.iteminstance
                     FROM {grade_items} i
@@ -172,6 +176,13 @@ class generate_grades extends \core\task\adhoc_task
                 }
                 $toplevelitems->close();
 
+                $semcatitem = \grade_item::fetch([
+                    'idnumber' => $semestridnumber,
+                    'itemtype' => 'category',
+                    'courseid' => $course->id
+                ]);
+                $semcatitem->force_regrading();
+
                 // Генерим доборы и фикс
                 foreach (['dobor1', 'dobor2', 'fix'] as $itemid) {
                     // Проверяем существование
@@ -204,33 +215,39 @@ class generate_grades extends \core\task\adhoc_task
                             $itemstogenerate[$itemid]['updated']++;
                             mtrace('Обновил элемент с id '.$record->id);
                         }
-                        continue;
+                    } else {
+                        // Создаем grade item
+                        $gradeitem = new \grade_item();
+                        $gradeitem->courseid = $course->id;
+                        $gradeitem->itemname = $itemstogenerate[$itemid]['name'];
+                        $gradeitem->itemtype = 'manual';
+                        $gradeitem->idnumber = $itemid;
+                        $gradeitem->grademax = 100;
+                        $gradeitem->grademin = 0;
+                        $gradeitem->gradepass = 0;
+                        $gradeitem->iteminfo = 'Автоматически созданный элемент оценки';
+                        $gradeitem->multfactor = 0;
+                        $gradeitem->weightoverride = 1;
+                        $gradeitem->aggregationcoef = 0;
+                        $gradeitem->aggregationcoef2 = 0;
+                        $gradeitem->locked = 0;
+                        $gradeitem->hidden = $itemstogenerate[$itemid]['hidden'];
+                        $gradeitem->calculation = $itemstogenerate[$itemid]['calculation'];
+                        $insertresult = $gradeitem->insert();
+
+                        if ($insertresult) {
+                            $itemstogenerate[$itemid]['added']++;
+                            mtrace('Создал элемент с id ' . $insertresult);
+                        }
                     }
 
-                    // Создаем grade item
-                    $gradeitem = new \grade_item();
-                    $gradeitem->courseid = $course->id;
-                    $gradeitem->itemname = $itemstogenerate[$itemid]['name'];
-                    $gradeitem->itemtype = 'manual';
-                    $gradeitem->idnumber = $itemid;
-                    $gradeitem->grademax = 100;
-                    $gradeitem->grademin = 0;
-                    $gradeitem->gradepass = 0;
-                    $gradeitem->iteminfo = 'Автоматически созданный элемент оценки';
-                    $gradeitem->multfactor = 0;
-                    $gradeitem->weightoverride = 1;
-                    $gradeitem->aggregationcoef = 0;
-                    $gradeitem->aggregationcoef2 = 0;
-                    $gradeitem->locked = 0;
-                    $gradeitem->hidden = $itemstogenerate[$itemid]['hidden'];
-                    $gradeitem->calculation = $itemstogenerate[$itemid]['calculation'];
-                    $insertresult = $gradeitem->insert();
 
-                    if ($insertresult) {
-                        $itemstogenerate[$itemid]['added']++;
-                        mtrace('Создал элемент с id '.$insertresult);
+                    if ($itemid == 'fix') {
+                        $itemtoregrade = \grade_item::fetch(['idnumber' => 'fix', 'courseid' => $course->id]);
+                        if ($itemtoregrade) $itemtoregrade->force_regrading();
                     }
                 }
+                \grade_regrade_final_grades($course->id);
             }
         }
         $categories->close();
